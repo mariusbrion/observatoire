@@ -22,11 +22,6 @@
 
     <main class="max-w-6xl mx-auto px-4 pb-20">
         
-        <!-- Configuration de l'URL -->
-        <div id="setup-notice" class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-8">
-            <p class="text-sm"><strong>Note technique :</strong> Pour afficher vos données, remplacez la variable <code>SCRIPT_URL</code> dans le code source par l'URL de déploiement de votre Google Apps Script.</p>
-        </div>
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             <!-- SECTION INFRASTRUCTURE -->
@@ -60,9 +55,9 @@
         </div>
     </main>
 
-    <>
+    <script>
         // --- CONFIGURATION ---
-        // REMPLACEZ CETTE URL PAR VOTRE URL DE DÉPLOIEMENT APPS SCRIPT
+        // URL de déploiement Google Apps Script mise à jour
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUZTRez3TPIBKPLKiiSc1cgK26irbc9g_YJY1NYS3_5hGk7tGDzeyB24PXTrKIw453PA/exec";
 
         async function fetchData() {
@@ -70,10 +65,9 @@
                 const response = await fetch(SCRIPT_URL);
                 const data = await response.json();
                 renderDashboard(data);
-                document.getElementById('setup-notice').classList.add('hidden');
             } catch (error) {
                 console.error("Erreur de récupération:", error);
-                document.getElementById('infraAnalysis').innerHTML = "Erreur de connexion aux données. Vérifiez l'URL du script.";
+                document.getElementById('infraAnalysis').innerHTML = "Erreur de connexion aux données. Vérifiez que le script est bien déployé en mode 'Tout le monde'.";
             }
         }
 
@@ -101,8 +95,8 @@
 
             // Analyse automatique Infra
             const diffKm = (infra.now - infra.prev).toFixed(2);
-            const evolutionPerc = (((infra.now - infra.prev) / infra.prev) * 100).toFixed(1);
-            const totalPerc = ((infra.now / infra.total) * 100).toFixed(1);
+            const evolutionPerc = (((infra.now - infra.prev) / (infra.prev || 1)) * 100).toFixed(1);
+            const totalPerc = ((infra.now / (infra.total || 1)) * 100).toFixed(1);
             
             document.getElementById('infraAnalysis').innerHTML = `
                 <p>Depuis la période précédente, le réseau a évolué de <span class="stat-highlight">${diffKm} km</span>, soit une progression de <span class="stat-highlight">${evolutionPerc}%</span>.</p>
@@ -151,9 +145,7 @@
         }
 
         // Lancement au chargement
-        if (SCRIPT_URL !== "VOTRE_URL_GOOGLE_APPS_SCRIPT_ICI") {
-            fetchData();
-        }
+        fetchData();
     </script>
 </body>
 </html>
