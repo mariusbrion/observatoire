@@ -88,7 +88,7 @@
         }
 
         function renderDashboard(data) {
-            // Conversion forcée en nombres pour éviter les erreurs de calcul
+            // Conversion forcée en nombres
             const infra = {
                 prev: parseFloat(data.infrastructure.prev) || 0,
                 now: parseFloat(data.infrastructure.now) || 0,
@@ -100,34 +100,49 @@
                 val: parseFloat(f.val) || 0
             }));
 
-            // --- 1. Graphique Camembert (Infra) ---
+            // Calcul des segments pour le graphique
+            const dejaAmenage = infra.prev;
+            const nouvellementAmenage = Math.max(0, infra.now - infra.prev);
+            const restant = Math.max(0, infra.total - infra.now);
+
+            // --- 1. Graphique Camembert (Infra) avec 3 couleurs ---
             const ctxInfra = document.getElementById('chartInfra').getContext('2d');
             new Chart(ctxInfra, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Aménagé', 'Restant'],
+                    labels: ['Déjà aménagé', 'Nouvellement aménagé', 'Restant'],
                     datasets: [{
-                        data: [infra.now, Math.max(0, infra.total - infra.now)],
-                        backgroundColor: ['#2563eb', '#e5e7eb'],
-                        hoverOffset: 4
+                        data: [dejaAmenage, nouvellementAmenage, restant],
+                        backgroundColor: [
+                            '#1e3a8a', // Bleu foncé (Existant)
+                            '#3b82f6', // Bleu clair (Nouveau)
+                            '#e5e7eb'  // Gris (Restant)
+                        ],
+                        hoverOffset: 4,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
                     }]
                 },
                 options: {
                     maintainAspectRatio: false,
                     plugins: { 
                         legend: { position: 'bottom' },
-                        tooltip: { callbacks: { label: (item) => ` ${item.label}: ${item.raw} km` } }
+                        tooltip: { 
+                            callbacks: { 
+                                label: (item) => ` ${item.label}: ${item.raw.toFixed(2)} km` 
+                            } 
+                        }
                     }
                 }
             });
 
             // Analyse automatique Infra
-            const diffKm = (infra.now - infra.prev).toFixed(2);
-            const evolutionPerc = infra.prev !== 0 ? (((infra.now - infra.prev) / infra.prev) * 100).toFixed(1) : "100";
+            const diffKm = nouvellementAmenage.toFixed(2);
+            const evolutionPerc = infra.prev !== 0 ? ((nouvellementAmenage / infra.prev) * 100).toFixed(1) : "100";
             const totalPerc = infra.total !== 0 ? ((infra.now / infra.total) * 100).toFixed(1) : "0";
             
             document.getElementById('infraAnalysis').innerHTML = `
-                <p>Depuis la période précédente, le réseau a évolué de <span class="stat-highlight">${diffKm} km</span>, soit une progression de <span class="stat-highlight">${evolutionPerc}%</span>.</p>
+                <p>Depuis la période précédente, le réseau a évolué de <span class="stat-highlight">${diffKm} km</span> (partie bleu clair), soit une progression de <span class="stat-highlight">${evolutionPerc}%</span>.</p>
                 <p>Aujourd'hui, <span class="stat-highlight">${totalPerc}%</span> de la voirie totale (${infra.total} km) est aménagée pour les cyclistes.</p>
             `;
 
@@ -177,7 +192,6 @@
             }
         }
 
-        // Lancement
         window.onload = fetchData;
     </script>
 </body>
