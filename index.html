@@ -9,6 +9,8 @@
     <style>
         .card { @apply bg-white p-6 rounded-xl shadow-lg border border-gray-100; }
         .stat-highlight { @apply font-bold text-blue-600; }
+        .loading-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
@@ -22,6 +24,9 @@
 
     <main class="max-w-6xl mx-auto px-4 pb-20">
         
+        <!-- Status / Error Message -->
+        <div id="status-message" class="hidden mb-8 p-4 rounded-lg"></div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             <!-- SECTION INFRASTRUCTURE -->
@@ -29,12 +34,11 @@
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
                     🗺️ Linéaire Aménagé
                 </h2>
-                <div class="relative h-64 mb-6">
+                <div class="relative h-64 mb-6 flex items-center justify-center bg-gray-50 rounded-lg" id="containerInfra">
                     <canvas id="chartInfra"></canvas>
                 </div>
                 <div id="infraAnalysis" class="space-y-3 text-gray-700 leading-relaxed pt-4 border-t border-gray-100">
-                    <!-- Généré par JS -->
-                    Chargement des données...
+                    <div class="loading-pulse">Récupération des indicateurs...</div>
                 </div>
             </section>
 
@@ -43,12 +47,11 @@
                 <h2 class="text-2xl font-bold mb-4 flex items-center">
                     📈 Fréquentation (Av. de Soulac)
                 </h2>
-                <div class="relative h-64 mb-6">
+                <div class="relative h-64 mb-6 flex items-center justify-center bg-gray-50 rounded-lg" id="containerFreq">
                     <canvas id="chartFreq"></canvas>
                 </div>
                 <div id="freqAnalysis" class="space-y-3 text-gray-700 leading-relaxed pt-4 border-t border-gray-100">
-                    <!-- Généré par JS -->
-                    Chargement des graphiques...
+                    <div class="loading-pulse">Analyse des comptages...</div>
                 </div>
             </section>
 
@@ -57,46 +60,71 @@
 
     <script>
         // --- CONFIGURATION ---
-        // URL de déploiement Google Apps Script mise à jour
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUZTRez3TPIBKPLKiiSc1cgK26irbc9g_YJY1NYS3_5hGk7tGDzeyB24PXTrKIw453PA/exec";
 
         async function fetchData() {
+            const statusEl = document.getElementById('status-message');
             try {
                 const response = await fetch(SCRIPT_URL);
+                if (!response.ok) throw new Error("Réponse réseau non OK");
+                
                 const data = await response.json();
+                console.log("Données reçues :", data);
+                
+                if (!data.infrastructure || !data.frequentation) {
+                    throw new Error("Format de données incorrect");
+                }
+
                 renderDashboard(data);
             } catch (error) {
-                console.error("Erreur de récupération:", error);
-                document.getElementById('infraAnalysis').innerHTML = "Erreur de connexion aux données. Vérifiez que le script est bien déployé en mode 'Tout le monde'.";
+                console.error("Erreur détaillée:", error);
+                statusEl.classList.remove('hidden');
+                statusEl.classList.add('bg-red-100', 'text-red-700');
+                statusEl.innerHTML = `<strong>Erreur de chargement :</strong> ${error.message}. <br><small>Assurez-vous que le script est déployé en 'Exécuter en tant que : Moi' et 'Qui a accès : Tout le monde'.</small>`;
+                
+                document.getElementById('infraAnalysis').innerHTML = "Impossible de charger les données.";
+                document.getElementById('freqAnalysis').innerHTML = "Impossible de charger les graphiques.";
             }
         }
 
         function renderDashboard(data) {
-            const infra = data.infrastructure;
-            const freq = data.frequentation;
+            // Conversion forcée en nombres pour éviter les erreurs de calcul
+            const infra = {
+                prev: parseFloat(data.infrastructure.prev) || 0,
+                now: parseFloat(data.infrastructure.now) || 0,
+                total: parseFloat(data.infrastructure.total) || 0
+            };
+
+            const freq = data.frequentation.map(f => ({
+                date: f.date,
+                val: parseFloat(f.val) || 0
+            }));
 
             // --- 1. Graphique Camembert (Infra) ---
             const ctxInfra = document.getElementById('chartInfra').getContext('2d');
             new Chart(ctxInfra, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Aménagé', 'Non aménagé'],
+                    labels: ['Aménagé', 'Restant'],
                     datasets: [{
-                        data: [infra.now, infra.total - infra.now],
+                        data: [infra.now, Math.max(0, infra.total - infra.now)],
                         backgroundColor: ['#2563eb', '#e5e7eb'],
-                        borderWidth: 0
+                        hoverOffset: 4
                     }]
                 },
                 options: {
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } }
+                    plugins: { 
+                        legend: { position: 'bottom' },
+                        tooltip: { callbacks: { label: (item) => ` ${item.label}: ${item.raw} km` } }
+                    }
                 }
             });
 
             // Analyse automatique Infra
             const diffKm = (infra.now - infra.prev).toFixed(2);
-            const evolutionPerc = (((infra.now - infra.prev) / (infra.prev || 1)) * 100).toFixed(1);
-            const totalPerc = ((infra.now / (infra.total || 1)) * 100).toFixed(1);
+            const evolutionPerc = infra.prev !== 0 ? (((infra.now - infra.prev) / infra.prev) * 100).toFixed(1) : "100";
+            const totalPerc = infra.total !== 0 ? ((infra.now / infra.total) * 100).toFixed(1) : "0";
             
             document.getElementById('infraAnalysis').innerHTML = `
                 <p>Depuis la période précédente, le réseau a évolué de <span class="stat-highlight">${diffKm} km</span>, soit une progression de <span class="stat-highlight">${evolutionPerc}%</span>.</p>
@@ -116,20 +144,25 @@
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             fill: true,
-                            tension: 0.3
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#10b981'
                         }]
                     },
                     options: {
                         maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true } },
+                        scales: { 
+                            y: { beginAtZero: true, grid: { display: false } },
+                            x: { grid: { display: false } }
+                        },
                         plugins: { legend: { display: false } }
                     }
                 });
 
                 // Analyse automatique Fréquentation
-                const values = freq.map(f => f.val);
-                const maxVal = Math.max(...values);
-                const minVal = Math.min(...values);
+                const vals = freq.map(f => f.val);
+                const maxVal = Math.max(...vals);
+                const minVal = Math.min(...vals);
                 const maxEntry = freq.find(f => f.val === maxVal);
                 const minEntry = freq.find(f => f.val === minVal);
                 const difference = maxVal - minVal;
@@ -140,12 +173,12 @@
                     <p>Cela représente une différence de <span class="stat-highlight">${difference} passages</span> entre ces deux relevés.</p>
                 `;
             } else {
-                document.getElementById('freqAnalysis').innerHTML = "Aucune donnée de fréquentation disponible.";
+                document.getElementById('freqAnalysis').innerHTML = "Aucune donnée de fréquentation trouvée dans les colonnes D et E.";
             }
         }
 
-        // Lancement au chargement
-        fetchData();
+        // Lancement
+        window.onload = fetchData;
     </script>
 </body>
 </html>
