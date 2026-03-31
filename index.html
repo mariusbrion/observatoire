@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observatoire du Vélo - Avenue de Soulac</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .card { @apply bg-white p-6 rounded-xl shadow-lg border border-gray-100; }
+        .stat-highlight { @apply font-bold text-blue-600; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <header class="bg-blue-700 text-white py-10 px-4 shadow-md mb-8">
+        <div class="max-w-6xl mx-auto">
+            <h1 class="text-4xl font-extrabold mb-2">🚲 Observatoire du Vélo</h1>
+            <p class="text-blue-100 text-lg">Suivi des aménagements et de la fréquentation cyclable.</p>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 pb-20">
+        
+        <!-- Configuration de l'URL -->
+        <div id="setup-notice" class="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-8">
+            <p class="text-sm"><strong>Note technique :</strong> Pour afficher vos données, remplacez la variable <code>SCRIPT_URL</code> dans le code source par l'URL de déploiement de votre Google Apps Script.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <!-- SECTION INFRASTRUCTURE -->
+            <section class="card">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    🗺️ Linéaire Aménagé
+                </h2>
+                <div class="relative h-64 mb-6">
+                    <canvas id="chartInfra"></canvas>
+                </div>
+                <div id="infraAnalysis" class="space-y-3 text-gray-700 leading-relaxed pt-4 border-t border-gray-100">
+                    <!-- Généré par JS -->
+                    Chargement des données...
+                </div>
+            </section>
+
+            <!-- SECTION FRÉQUENTATION -->
+            <section class="card">
+                <h2 class="text-2xl font-bold mb-4 flex items-center">
+                    📈 Fréquentation (Av. de Soulac)
+                </h2>
+                <div class="relative h-64 mb-6">
+                    <canvas id="chartFreq"></canvas>
+                </div>
+                <div id="freqAnalysis" class="space-y-3 text-gray-700 leading-relaxed pt-4 border-t border-gray-100">
+                    <!-- Généré par JS -->
+                    Chargement des graphiques...
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        // --- CONFIGURATION ---
+        // REMPLACEZ CETTE URL PAR VOTRE URL DE DÉPLOIEMENT APPS SCRIPT
+        const SCRIPT_URL = "VOTRE_URL_GOOGLE_APPS_SCRIPT_ICI";
+
+        async function fetchData() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const data = await response.json();
+                renderDashboard(data);
+                document.getElementById('setup-notice').classList.add('hidden');
+            } catch (error) {
+                console.error("Erreur de récupération:", error);
+                document.getElementById('infraAnalysis').innerHTML = "Erreur de connexion aux données. Vérifiez l'URL du script.";
+            }
+        }
+
+        function renderDashboard(data) {
+            const infra = data.infrastructure;
+            const freq = data.frequentation;
+
+            // --- 1. Graphique Camembert (Infra) ---
+            const ctxInfra = document.getElementById('chartInfra').getContext('2d');
+            new Chart(ctxInfra, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Aménagé', 'Non aménagé'],
+                    datasets: [{
+                        data: [infra.now, infra.total - infra.now],
+                        backgroundColor: ['#2563eb', '#e5e7eb'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // Analyse automatique Infra
+            const diffKm = (infra.now - infra.prev).toFixed(2);
+            const evolutionPerc = (((infra.now - infra.prev) / infra.prev) * 100).toFixed(1);
+            const totalPerc = ((infra.now / infra.total) * 100).toFixed(1);
+            
+            document.getElementById('infraAnalysis').innerHTML = `
+                <p>Depuis la période précédente, le réseau a évolué de <span class="stat-highlight">${diffKm} km</span>, soit une progression de <span class="stat-highlight">${evolutionPerc}%</span>.</p>
+                <p>Aujourd'hui, <span class="stat-highlight">${totalPerc}%</span> de la voirie totale (${infra.total} km) est aménagée pour les cyclistes.</p>
+            `;
+
+            // --- 2. Graphique Linéaire (Fréquentation) ---
+            if (freq && freq.length > 0) {
+                const ctxFreq = document.getElementById('chartFreq').getContext('2d');
+                new Chart(ctxFreq, {
+                    type: 'line',
+                    data: {
+                        labels: freq.map(f => f.date),
+                        datasets: [{
+                            label: 'Nombre de cyclistes',
+                            data: freq.map(f => f.val),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+
+                // Analyse automatique Fréquentation
+                const values = freq.map(f => f.val);
+                const maxVal = Math.max(...values);
+                const minVal = Math.min(...values);
+                const maxEntry = freq.find(f => f.val === maxVal);
+                const minEntry = freq.find(f => f.val === minVal);
+                const difference = maxVal - minVal;
+
+                document.getElementById('freqAnalysis').innerHTML = `
+                    <p>Le plus bas comptage a été enregistré le <span class="font-semibold">${minEntry.date}</span> avec <span class="stat-highlight">${minVal} cyclistes</span>.</p>
+                    <p>Le pic de fréquentation a été atteint le <span class="font-semibold">${maxEntry.date}</span> avec <span class="stat-highlight">${maxVal} cyclistes</span>.</p>
+                    <p>Cela représente une différence de <span class="stat-highlight">${difference} passages</span> entre ces deux relevés.</p>
+                `;
+            } else {
+                document.getElementById('freqAnalysis').innerHTML = "Aucune donnée de fréquentation disponible.";
+            }
+        }
+
+        // Lancement au chargement
+        if (SCRIPT_URL !== "VOTRE_URL_GOOGLE_APPS_SCRIPT_ICI") {
+            fetchData();
+        }
+    </script>
+</body>
+</html>
